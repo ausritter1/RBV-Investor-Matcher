@@ -25,7 +25,7 @@ with col2:
 
 # Set OpenAI API key directly
 os.environ[
-    'OPENAI_API_KEY'] = "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"
+    'OPENAI_API_KEY'] = "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"
 
 # Initialize models
 embeddings = OpenAIEmbeddings()
