@@ -1,0 +1,168 @@
+import streamlit as st
+import pandas as pd
+from langchain_community.embeddings import OpenAIEmbeddings
+from langchain_community.vectorstores.faiss import FAISS
+from langchain_openai import ChatOpenAI
+from langchain.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+import os
+from typing import List
+import json
+from PIL import Image
+
+# Set page configuration
+st.set_page_config(
+    page_title="RBV Portfolio Company VC Matcher",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Load and display RBV logo
+logo = Image.open("logo.png")
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    st.image(logo, width=150)
+
+# Set OpenAI API key directly
+os.environ[
+    'OPENAI_API_KEY'] = "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"
+
+# Initialize models
+embeddings = OpenAIEmbeddings()
+llm = ChatOpenAI(temperature=0.1)
+
+
+def load_and_process_data():
+    """Load and process the VC relationships data"""
+    df = pd.read_csv("vcrels.csv")
+
+    # Create documents for vectorstore
+    documents = []
+    for _, row in df.iterrows():
+        content = f"""
+        Firm: {row['Firm Name']}
+        Description: {row['Description']}
+        Firm Type: {row['Firm Type']}
+        """
+        documents.append({"content": content, "metadata": dict(row)})
+
+    return df, documents
+
+
+def create_vectorstore(documents):
+    """Create FAISS vectorstore from documents"""
+    texts = [doc["content"] for doc in documents]
+    metadatas = [doc["metadata"] for doc in documents]
+    vectorstore = FAISS.from_texts(texts, embeddings, metadatas=metadatas)
+    return vectorstore
+
+
+def analyze_startup(description: str, vectorstore) -> dict:
+    """Analyze startup and find matching investors"""
+    template = """You are an expert VC analyst for RBV. Analyze the following portfolio company description and recommend the most suitable investors from our network.
+
+    Portfolio Company Description: {description}
+
+    Based on the provided context about investors in our network, identify the top 3 most relevant investors and explain why they would be good matches.
+
+    Context about potential investors:
+    {context}
+
+    Please provide your response in the following JSON format:
+    {{
+        "matches": [
+            {{
+                "investor": "Name of investor firm",
+                "rationale": "2-3 sentence explanation of why this investor is a good match"
+            }}
+        ],
+        "summary": "2-3 sentence overall summary of the matching logic"
+    }}
+    """
+
+    prompt = PromptTemplate.from_template(template)
+    docs = vectorstore.similarity_search(description, k=5)
+    context = "\n\n".join(d.page_content for d in docs)
+    chain = prompt | llm | StrOutputParser()
+    result = chain.invoke({"description": description, "context": context})
+
+    return json.loads(result)
+
+
+# Main app
+st.title("RBV Portfolio Company VC Matcher 🤝")
+st.write("Match your portfolio companies with the most relevant VCs in our network.")
+
+# Load data
+with st.spinner("Loading investor database..."):
+    df, documents = load_and_process_data()
+    vectorstore = create_vectorstore(documents)
+
+# Input section
+st.subheader("Portfolio Company Information")
+description = st.text_area(
+    "Enter portfolio company description",
+    height=150,
+    placeholder="Describe the company, including: sector, stage, traction, team background, and any key achievements..."
+)
+
+if st.button("Find Matching Investors"):
+    if description:
+        with st.spinner("Analyzing company and finding matches..."):
+            results = analyze_startup(description, vectorstore)
+
+            # Display results
+            st.subheader("🎯 Top Investor Matches")
+
+            # Summary
+            st.info(results["summary"])
+
+            # Matches
+            for i, match in enumerate(results["matches"], 1):
+                with st.expander(f"#{i} - {match['investor']}", expanded=True):
+                    st.write("**Why this investor?**")
+                    st.write(match["rationale"])
+
+                    # Get additional investor info from DataFrame
+                    matching_investors = df[df["Firm Name"] == match["investor"]]
+                    if not matching_investors.empty:
+                        investor_info = matching_investors.iloc[0]
+
+                        cols = st.columns(2)
+                        with cols[0]:
+                            st.write("**Description:**")
+                            st.write(investor_info["Description"])
+                        with cols[1]:
+                            st.write("**Type:**")
+                            st.write(investor_info["Firm Type"])
+
+            # Export options
+            st.download_button(
+                "Export Results (JSON)",
+                data=json.dumps(results, indent=2),
+                file_name="investor_matches.json",
+                mime="application/json"
+            )
+    else:
+        st.warning("Please enter a portfolio company description first.")
+
+# Sidebar
+with st.sidebar:
+    st.subheader("About")
+    st.write("""
+    This tool helps match RBV portfolio companies with the most relevant investors from our network.
+
+    It uses:
+    - Advanced AI matching
+    - Deep investor network analysis
+    - Contextual understanding
+
+    To get the best results:
+    1. Provide detailed company information
+    2. Include current stage and traction
+    3. Highlight unique technology or advantages
+    4. Mention target market and growth plans
+    """)
+
+    st.markdown("---")
+    st.caption("Read Beard Ventures © 2024")
