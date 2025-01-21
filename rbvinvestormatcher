@@ -23,9 +23,13 @@ col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
     st.image(logo, width=150)
 
-# Set OpenAI API key directly
-os.environ[
-    'OPENAI_API_KEY'] = "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"
+# Check for API key in secrets
+if 'openai_api_key' not in st.secrets:
+    st.error("OpenAI API key not found. Please set it in the Streamlit secrets.")
+    st.stop()
+
+# Set OpenAI API key from secrets
+os.environ['OPENAI_API_KEY'] = st.secrets['openai_api_key']
 
 # Initialize models
 embeddings = OpenAIEmbeddings()
