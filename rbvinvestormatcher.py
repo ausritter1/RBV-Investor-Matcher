@@ -35,23 +35,23 @@ os.environ['OPENAI_API_KEY'] = st.secrets['openai_api_key']
 embeddings = OpenAIEmbeddings()
 llm = ChatOpenAI(temperature=0.1)
 
-
 def load_and_process_data():
     """Load and process the VC relationships data"""
-    df = pd.read_csv("vcrels.csv")
+    df = pd.read_csv("VC Firm Relationships 2_3  Sheet1.csv")
 
     # Create documents for vectorstore
     documents = []
     for _, row in df.iterrows():
         content = f"""
-        Firm: {row['Firm Name']}
+        Firm: {row['Company']}
+        Domain: {row['Domain']}
         Description: {row['Description']}
-        Firm Type: {row['Firm Type']}
+        Preferred Stage: {row['Preferred Stage']}
+        Preferred Sector: {row['Preferred Sector']}
         """
         documents.append({"content": content, "metadata": dict(row)})
 
     return df, documents
-
 
 def create_vectorstore(documents):
     """Create FAISS vectorstore from documents"""
@@ -60,15 +60,18 @@ def create_vectorstore(documents):
     vectorstore = FAISS.from_texts(texts, embeddings, metadatas=metadatas)
     return vectorstore
 
-
 def analyze_startup(description: str, vectorstore) -> dict:
     """Analyze startup and find matching investors"""
     template = """You are an expert VC analyst for RBV. Analyze the following portfolio company description and recommend the most suitable investors from our network.
 
     Portfolio Company Description: {description}
 
-    Based on the provided context about investors in our network, identify the top 3 most relevant investors and explain why they would be good matches.
-
+    Based on the provided context about investors in our network, identify the top 3 most relevant investors and explain why they would be good matches. 
+    Pay special attention to matching:
+    1. The company's stage with the investor's preferred stage
+    2. The company's sector with the investor's preferred sectors
+    3. Any domain-specific alignment
+    
     Context about potential investors:
     {context}
 
@@ -77,10 +80,10 @@ def analyze_startup(description: str, vectorstore) -> dict:
         "matches": [
             {{
                 "investor": "Name of investor firm",
-                "rationale": "2-3 sentence explanation of why this investor is a good match"
+                "rationale": "2-3 sentence explanation of why this investor is a good match, specifically mentioning stage and sector fit"
             }}
         ],
-        "summary": "2-3 sentence overall summary of the matching logic"
+        "summary": "2-3 sentence overall summary of the matching logic, highlighting stage and sector alignment"
     }}
     """
 
@@ -91,7 +94,6 @@ def analyze_startup(description: str, vectorstore) -> dict:
     result = chain.invoke({"description": description, "context": context})
 
     return json.loads(result)
-
 
 # Main app
 st.title("RBV Portfolio Company VC Matcher 🤝")
@@ -128,17 +130,19 @@ if st.button("Find Matching Investors"):
                     st.write(match["rationale"])
 
                     # Get additional investor info from DataFrame
-                    matching_investors = df[df["Firm Name"] == match["investor"]]
+                    matching_investors = df[df["Company"] == match["investor"]]
                     if not matching_investors.empty:
                         investor_info = matching_investors.iloc[0]
 
                         cols = st.columns(2)
                         with cols[0]:
-                            st.write("**Description:**")
-                            st.write(investor_info["Description"])
+                            st.write("**Domain & Description:**")
+                            st.write(f"**Domain:** {investor_info['Domain']}")
+                            st.write(f"**Description:** {investor_info['Description']}")
                         with cols[1]:
-                            st.write("**Type:**")
-                            st.write(investor_info["Firm Type"])
+                            st.write("**Investment Preferences:**")
+                            st.write(f"**Preferred Stage:** {investor_info['Preferred Stage']}")
+                            st.write(f"**Preferred Sector:** {investor_info['Preferred Sector']}")
 
             # Export options
             st.download_button(
@@ -169,4 +173,4 @@ with st.sidebar:
     """)
 
     st.markdown("---")
-    st.caption("Read Beard Ventures © 2024")
+    st.caption("Read Beard Ventures © 2025")
