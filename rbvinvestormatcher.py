@@ -37,7 +37,7 @@ llm = ChatOpenAI(temperature=0.1)
 
 def load_and_process_data():
     """Load and process the VC relationships data"""
-    df = pd.read_csv("vcrellys.csv")
+    df = pd.read_csv("firmrellys.csv")
 
     # Create documents for vectorstore
     documents = []
